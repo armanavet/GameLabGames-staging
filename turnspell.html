@@ -13,7 +13,9 @@
      The board here is a 3D cube, but everything around it is the same chrome
      the crossword and sudoku use: same toolbar, same rail, same overlays,
      same mobile dock, same caption. */
-  #app{max-width:1040px}
+  /* An amber deep enough to carry white text, sitting in the same family as
+     the platform's peach rather than Wordle's own yellow. */
+  #app{max-width:1040px;--amber2:#bf8412}
   .main{display:grid;grid-template-columns:1fr 264px;gap:28px;padding:18px 28px 12px;
         flex:1 1 auto;min-height:0}
   .stage{min-width:0;display:flex;flex-direction:column;align-items:center;gap:14px}
@@ -22,14 +24,20 @@
      54 stickers, each positioned in 3D by its own transform. A face turn is a
      rotation prepended to the stickers in that layer, which is why nothing
      here needs to know about faces as containers. */
+  /* Nothing on the cube is clickable — turns come from the buttons — so the
+     whole thing is inert to pointers and unselectable. Without that, dragging
+     to look around highlights the letters instead of orbiting. */
   .scene{width:100%;display:flex;align-items:center;justify-content:center;
          perspective:1500px;touch-action:none;cursor:grab;
-         height:var(--scene-h,320px);flex:none}
+         height:var(--scene-h,320px);flex:none;
+         user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
+  .scene *{user-select:none;-webkit-user-select:none;pointer-events:none}
   .scene:active{cursor:grabbing}
   .scene:focus-visible{outline:2px solid var(--focus);outline-offset:4px;border-radius:12px}
   .cube{position:relative;transform-style:preserve-3d;
         width:var(--cs,210px);height:var(--cs,210px);
-        --sz:calc(var(--cell,70px) - 3px);
+        --sz:calc(var(--cell,70px) * .94);        /* the letter tile */
+        --bsz:calc(var(--cell,70px) + 1px);       /* its backing: a whole cell */
         transform:rotateX(var(--ax,-20deg)) rotateY(var(--ay,-28deg))}
 
   /* Every sticker carries its own dark backing rather than the cube having one
@@ -39,12 +47,16 @@
      per-sticker backing rotates with its sticker, so nothing static is ever
      exposed, and because it is double-sided it also supplies the black
      plastic you should see through the gaps and into the cube. */
+  /* A backing spans its WHOLE cell, not the inset tile, so neighbours tile
+     edge to edge and the shell is sealed. Sizing it like the tile — as it was
+     first written — left exactly the same gap open, so the cracks showed the
+     page straight through the cube. */
   .sb{position:absolute;left:50%;top:50%;
-      margin:calc(var(--sz) / -2) 0 0 calc(var(--sz) / -2);
-      width:var(--sz);height:var(--sz);border-radius:3px;
-      background:#2b2b2b;box-sizing:border-box;
+      margin:calc(var(--bsz) / -2) 0 0 calc(var(--bsz) / -2);
+      width:var(--bsz);height:var(--bsz);
+      background:#262626;box-sizing:border-box;
       transition:transform .26s cubic-bezier(.4,.05,.2,1);
-      transform:var(--lr,rotate(0deg)) var(--pl,translateZ(0)) translateZ(-3px)}
+      transform:var(--lr,rotate(0deg)) var(--pl,translateZ(0)) translateZ(-2px)}
   .sb.nofx{transition:none}
 
   /* A sticker reads like a sudoku cell: white ground, dark rules, dark letter.
@@ -62,20 +74,36 @@
       transition:transform .26s cubic-bezier(.4,.05,.2,1), background .18s, color .18s;
       transform:var(--lr,rotate(0deg)) var(--pl,translateZ(0))}
   .st.nofx{transition:background .18s, color .18s}
-  /* Slots the goal word has to fill: tinted, numbered, and green once right. */
-  .st.slot{background:var(--band)}
-  .st.slot.ok{background:var(--ok);color:#fff;border-color:#0a7d4c}
+
+  /* ---------- Wordle marking ----------
+     The word is never shown, so these three states are the whole clue. A slot
+     is one of the numbered squares the word has to fill; green means the right
+     letter in the right slot, amber means that letter belongs to the word but
+     sits somewhere else in it, and an unmarked slot means the letter is not in
+     the word at all. */
+  .st.on{background:#f4f4f4;box-shadow:inset 0 0 0 1.5px #cfcfcf}
+  .st.on.exact{background:var(--ok);color:#fff;box-shadow:none}
+  .st.on.moved{background:var(--amber2);color:#fff;box-shadow:none}
   .st .num{position:absolute;top:2px;left:4px;font-size:calc(var(--cell,70px) * .22);
-           font-weight:700;color:var(--xw-num,#8a5a1a);line-height:1}
-  .st.slot.ok .num{color:rgba(255,255,255,.85)}
+           font-weight:700;color:#8a8a8a;line-height:1}
+  .st.on.exact .num,.st.on.moved .num{color:rgba(255,255,255,.85)}
 
   /* ---------- prompt + goal tiles ---------- */
   .prompt{font-size:14px;font-weight:600;color:var(--ink);text-align:center;margin:0}
   .prompt b{font-weight:900}
+  /* The reader's current front face, scored — this is the guess row. */
   .tiles{display:flex;gap:7px;justify-content:center;flex-wrap:wrap}
   .tile{width:38px;height:38px;border-radius:5px;display:flex;align-items:center;justify-content:center;
-        font-size:19px;font-weight:700;background:#efefef;color:var(--ink3);border:1.5px solid #dcdcdc}
-  .tile.ok{background:var(--ok);border-color:#0a7d4c;color:#fff}
+        font-size:19px;font-weight:700;background:#f4f4f4;color:var(--ink3);border:1.5px solid #d6d6d6}
+  .tile.exact{background:var(--ok);border-color:#0a7d4c;color:#fff}
+  .tile.moved{background:var(--amber2);border-color:#96670c;color:#fff}
+  .viewrow{display:flex;justify-content:center}
+  .viewbtn{border:1px solid var(--panel-line);background:#fff;border-radius:16px;height:28px;
+           padding:0 13px;font-family:var(--font);font-size:11.5px;font-weight:600;color:#5f5f5f;
+           cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+  .viewbtn:hover{background:#f4f4f4;color:var(--ink)}
+  .mbody b.lg{color:var(--ok-ink)}
+  .mbody b.la{color:#8a5f0a}
   .caption{font-size:12.5px;color:#8a8a8a;text-align:center;margin:0}
 
   /* ---------- move pad ----------
@@ -117,8 +145,9 @@
   .rung .len{font-size:11.5px;font-weight:700;color:#8a8a8a;width:12px;flex:none}
   .rung .mini{display:flex;gap:3px;flex:1}
   .rung .mini i{width:15px;height:18px;border-radius:3px;background:#efefef;
-                display:block;flex:none}
-  .rung .mini i.ok{background:var(--ok)}
+                display:block;flex:none;box-shadow:inset 0 0 0 1px #dcdcdc}
+  .rung .mini i.exact{background:var(--ok);box-shadow:none}
+  .rung .mini i.moved{background:var(--amber2);box-shadow:none}
   .rung .tick{font-size:11px;font-weight:700;color:var(--ok-ink);flex:none}
 
   /* ---------- mobile ---------- */
@@ -150,6 +179,9 @@
       <div class="scene" id="scene" tabindex="0" role="application"
            aria-label="Letter cube. Drag to look around; use the turn buttons to rotate a face.">
         <div class="cube" id="cube"></div>
+      </div>
+      <div class="viewrow">
+        <button class="viewbtn" type="button" id="viewReset">Reset view</button>
       </div>
       <p class="prompt" id="prompt">&mdash;</p>
       <div class="tiles" id="tiles"></div>
@@ -185,8 +217,6 @@
       <div class="sgroup">
         <div class="srow"><div class="lab"><b>Show timer</b><span>Shows the timer while playing this puzzle</span></div>
           <label class="sw"><input type="checkbox" id="optTimerShown" checked/><i></i></label></div>
-        <div class="srow"><div class="lab"><b>Highlight goal squares</b><span>Tints the squares the word has to fill</span></div>
-          <label class="sw"><input type="checkbox" id="optSlots" checked/><i></i></label></div>
         <div class="srow"><div class="lab"><b>Animate turns</b><span>Turn this off if the cube feels slow on your device</span></div>
           <label class="sw"><input type="checkbox" id="optAnim" checked/><i></i></label></div>
       </div>
@@ -199,10 +229,15 @@
     <div class="mhead"><h2 id="dlgH-howto">How To Play</h2>
       <button class="mclose" type="button" data-close aria-label="Close"><svg width="24" height="24" aria-hidden="true"><use href="icons.svg#i-close"/></svg></button></div>
     <div class="mbody">
-      <p>Every square on the cube carries a letter. Turn the faces until the goal word appears on the <b>front face</b>, reading left to right, top to bottom.</p>
-      <p>The tinted squares are the ones the word has to fill &mdash; they are numbered in reading order. A square turns <b>green</b> when it holds the right letter.</p>
-      <p>Use the turn buttons, or the keys <b>T</b>&nbsp;/&nbsp;<b>B</b>&nbsp;/&nbsp;<b>L</b>&nbsp;/&nbsp;<b>R</b>&nbsp;/&nbsp;<b>F</b>&nbsp;/&nbsp;<b>K</b> for top, bottom, left, right, front and back. Hold <b>Shift</b> to turn the other way. Drag the cube to look around it.</p>
-      <p>There are three goal words each day, and none of them is ever more than a few turns away. Your score is the number of turns you take and the time on the clock.</p>
+      <p>Three words are hidden in one cube. Every square carries a letter, and you turn the faces until a word lines up on the numbered squares of the <b>front face</b>.</p>
+      <p><b>You are never told the words.</b> The squares tell you how close you are, the way Wordle does:</p>
+      <p><b class="lg">Green</b> &mdash; the right letter in the right square.<br/>
+         <b class="la">Amber</b> &mdash; that letter is in the word, but belongs in a different square.<br/>
+         <b>Grey</b> &mdash; that letter is not in the word at all.</p>
+      <p>The numbers show the order: the <b>four corners</b> first, then the <b>centre</b>, then an <b>edge</b>. So a four-letter word sits on the corners alone.</p>
+      <p>All three words share the same cube, so switching between them changes nothing &mdash; and every turn gives you clues about all three at once.</p>
+      <p>Use the turn buttons, or the keys <b>T</b>&nbsp;/&nbsp;<b>B</b>&nbsp;/&nbsp;<b>L</b>&nbsp;/&nbsp;<b>R</b>&nbsp;/&nbsp;<b>F</b>&nbsp;/&nbsp;<b>K</b> for top, bottom, left, right, front and back. Hold <b>Shift</b> to turn the other way. Drag the cube to look around it, and <b>Reset view</b> to face the front again.</p>
+      <p>No word is more than six turns from where you start. Your score is the turns you take and the time on the clock.</p>
     </div>
     <div class="mbtns"><button class="btn pri" type="button" data-close>Got it</button></div>
   </div></div>
@@ -287,10 +322,16 @@
       DOW[d.getDay()]+', '+MON[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear();
   })();
 
-  /* ---------- state ---------- */
-  let rung=0, state=null, hist=[], moves=0, rungMoves=[0,0,0], done=[false,false,false];
-  let won=false, hintMove='';
-  const opts={slots:true, anim:true};
+  /* ---------- state ----------
+     ONE cube for the whole puzzle. `active` is only which word's slots are
+     being judged — changing it does not touch `state`, because every word is
+     planted into this same cube. `solvedAt` records the turn count when each
+     word fell. */
+  const LENS=P.lengths;
+  let active=LENS[0], state=null, hist=[], moves=0;
+  const solvedAt={};
+  let won=false;
+  const opts={anim:true};
 
   /* Face names rather than notation, in the order a reader scans them. */
   const FACE_LABEL={U:'Top',D:'Bottom',L:'Left',R:'Right',F:'Front',B:'Back'};
@@ -344,38 +385,59 @@
      slide to its cell. Recomputed after every turn — the DOM node stays put
      and only its transform changes. */
   function placement(st){
-    const f=faceOf(st.n), slot=T.slotOf(f,st.p);
-    const row=Math.floor(slot/3), col=slot%3;
+    const f=faceOf(st.n), cell=T.cellOf(f,st.p);
+    const row=Math.floor(cell/3), col=cell%3;
     return (FACE_ROT[f]?FACE_ROT[f]+' ':'')+'translateZ(var(--half)) '+
            'translate(calc(var(--cell) * '+(col-1)+'), calc(var(--cell) * '+(row-1)+'))';
   }
 
+  /* Marks for every word at once — each reads the same front face at its own
+     length, which is why a single turn is a clue about all three. */
+  function marksFor(L){
+    return T.mark(T.frontWord(state,L),P.goals[L].word);
+  }
+  /* which numbered slot, if any, a front-face cell is — PATH order */
+  const slotOfCell=cell=>T.PATH.indexOf(cell);
+
   function paint(){
-    const R=P.rungs[rung], L=R.len, word=R.word;
-    const front=T.faceLetters(state,'F');
+    const L=active;
+    const m=marksFor(L);
+    const front=T.frontWord(state,L);
     state.forEach((st,i)=>{
-      const el=els[i], f=faceOf(st.n), slot=T.slotOf(f,st.p);
+      const el=els[i], f=faceOf(st.n), cell=T.cellOf(f,st.p);
       setPlace(i,placement(st));
       setLayer(i,'rotate(0deg)');
       el.querySelector('.ch').textContent=st.ch;
-      const isSlot=(f==='F'&&slot<L);
-      el.classList.toggle('slot',isSlot&&opts.slots);
-      el.classList.toggle('ok',isSlot&&st.ch===word[slot]);
-      el.querySelector('.num').textContent=(isSlot&&opts.slots)?String(slot+1):'';
+      const k=(f==='F')?slotOfCell(cell):-1;
+      const inWord=(k>=0&&k<L);
+      el.classList.toggle('on',inWord);
+      el.classList.toggle('exact',inWord&&m[k]==='exact');
+      el.classList.toggle('moved',inWord&&m[k]==='moved');
+      el.querySelector('.num').textContent=inWord?String(k+1):'';
       el.setAttribute('aria-hidden','true');
     });
-    /* the goal tiles mirror the front face, so progress reads without the cube */
+
+    /* The guess row: what is on the front face right now, scored. The answer
+       is never printed anywhere. */
     const tiles=$('#tiles'); tiles.innerHTML='';
-    for(let i=0;i<L;i++){
+    for(let k=0;k<L;k++){
       const t=document.createElement('div');
-      t.className='tile'+(front[i]===word[i]?' ok':'');
-      t.textContent=word[i];
+      t.className='tile'+(m[k]==='absent'?'':' '+m[k]);
+      t.textContent=front[k]||'';
       tiles.appendChild(t);
     }
-    $('#prompt').innerHTML='Spell <b>'+word+'</b> on the front face.';
+
+    const WHERE={4:'the four corners',5:'the corners and the centre',
+                 6:'the corners, the centre and one edge'};
+    const greens=m.filter(x=>x==='exact').length;
+    $('#prompt').innerHTML=solvedAt[L]!==undefined
+      ? 'Found in <b>'+solvedAt[L]+'</b> turns.'
+      : '<b>'+L+' letters</b> on '+(WHERE[L]||'the numbered squares')+
+        ' &middot; '+greens+' of '+L+' in place';
+
     XW.setChip('moves',String(moves));
     $('#undoBtn').disabled=!hist.length;
-    $('#hintBtn').disabled=done[rung];
+    $('#hintBtn').disabled=solvedAt[L]!==undefined;
     paintLadder();
     save();
   }
@@ -383,30 +445,42 @@
   function paintLadder(){
     [$('#ladder'),$('#ladderMob')].forEach(host=>{
       host.innerHTML='';
-      P.rungs.forEach((r,i)=>{
+      LENS.forEach(L=>{
+        const m=marksFor(L), solved=solvedAt[L]!==undefined;
         const b=document.createElement('button');
         b.type='button';
-        b.className='rung'+(i===rung?' on':'')+(done[i]?' won':'');
-        b.setAttribute('aria-current',i===rung?'true':'false');
-        const len=document.createElement('span'); len.className='len'; len.textContent=r.len;
+        b.className='rung'+(L===active?' on':'')+(solved?' won':'');
+        b.setAttribute('aria-current',L===active?'true':'false');
+        const len=document.createElement('span'); len.className='len'; len.textContent=L;
         const mini=document.createElement('span'); mini.className='mini';
-        const shown=(i===rung)?T.faceLetters(state,'F'):null;
-        for(let k=0;k<r.len;k++){
+        /* every row is live, so a turn shows its effect on all three words */
+        for(let k=0;k<L;k++){
           const c=document.createElement('i');
-          if(done[i]||(shown&&shown[k]===r.word[k])) c.className='ok';
+          const st=solved?'exact':m[k];
+          if(st!=='absent') c.className=st;
           mini.appendChild(c);
         }
         b.appendChild(len); b.appendChild(mini);
-        if(done[i]){
+        if(solved){
           const t=document.createElement('span'); t.className='tick';
-          t.textContent='✓ '+rungMoves[i]+' turns'; b.appendChild(t);
+          t.textContent='✓ '+solvedAt[L]; b.appendChild(t);
         }
-        b.setAttribute('aria-label','Word '+(i+1)+', '+r.len+' letters'+
-          (done[i]?', solved in '+rungMoves[i]+' turns':''));
-        b.addEventListener('click',()=>loadRung(i));
+        b.setAttribute('aria-label',L+'-letter word, '+
+          (solved?'found in '+solvedAt[L]+' turns'
+                 :m.filter(x=>x==='exact').length+' of '+L+' letters in place'));
+        b.addEventListener('click',()=>setActive(L));
         host.appendChild(b);
       });
     });
+  }
+
+  /* Switching target words must not disturb the cube — same cube, different
+     slots being judged. This is the whole point of planting them together. */
+  function setActive(L){
+    if(busy) return;
+    active=L;
+    paint();
+    XW.announce(L+'-letter word selected. The cube has not changed.');
   }
 
   /* ---------- turning ---------- */
@@ -415,8 +489,7 @@
     if(busy||won) return;
     const f=move[0], a=T.axisOf(f), s=T.signOf(f);
     const css=layerCss(f,move.length>1);
-    if(record!==false){ hist.push(move); moves++; rungMoves[rung]=(rungMoves[rung]||0)+1; }
-    hintMove='';
+    if(record!==false){ hist.push(move); moves++; }
 
     const affected=[];
     state.forEach((st,i)=>{ if(st.p[a]===s) affected.push(i); });
@@ -438,73 +511,49 @@
     setTimeout(commit,270);
   }
 
-  function loadRung(i){
-    if(busy) return;
-    rung=i;
-    state=T.clone(P.rungs[i].start);
-    /* Revisiting a word you already solved should show it solved — a ticked
-       row above a scrambled cube reads as a bug. */
-    if(done[i]) P.rungs[i].solution.forEach(m=>T.applyMove(state,m));
-    hist=[]; rungMoves[i]=rungMoves[i]||0; hintMove='';
-    paint();
-    XW.announce('Word '+(i+1)+', '+P.rungs[i].len+' letters'+(done[i]?', already solved':'')+'.');
-  }
-
   /* ---------- win ----------
-     A rung is done the moment the front face reads the word; the puzzle is
-     done when all three are. Score is turns and time, per the brief. */
+     Every turn is checked against ALL the words, not just the one being
+     chased — you can stumble onto a word you were not aiming at, and being
+     told so is more satisfying than having it pass unnoticed. */
   function checkWin(){
-    const R=P.rungs[rung];
-    if(!done[rung]&&T.readWord(state,'F',R.len)===R.word){
-      done[rung]=true;
-      paintLadder(); save();
-      XW.emit('assist_used',{action:'rung_complete',rung:rung});
-      const next=done.findIndex(d=>!d);
-      if(next<0){
-        won=true; XW.timer.stop();
-        $('#winMoves').textContent=String(moves);
-        $('#winTime').textContent=XW.fmtTime(XW.timer.secs);
-        XW.openOverlay('winOverlay');
-        XW.emit('game_complete',{puzzleId:puzId,seconds:XW.timer.secs,moves:moves});
-        XW.announce('All three words spelled in '+moves+' turns.');
-      }else{
-        XW.toast('“'+R.word+'” — got it. Next word.');
-        XW.announce('“'+R.word+'” solved. Moving to word '+(next+1)+'.');
-        setTimeout(()=>{ if(!won) loadRung(next); },900);
-      }
+    let found=null;
+    LENS.forEach(L=>{
+      if(solvedAt[L]!==undefined) return;
+      if(T.frontWord(state,L)===P.goals[L].word){ solvedAt[L]=moves; found=L; }
+    });
+    if(found===null) return;
+
+    const word=P.goals[found].word;
+    paintLadder(); save();
+    XW.emit('assist_used',{action:'word_found',len:found});
+
+    if(LENS.every(L=>solvedAt[L]!==undefined)){
+      won=true; XW.timer.stop();
+      $('#winMoves').textContent=String(moves);
+      $('#winTime').textContent=XW.fmtTime(XW.timer.secs);
+      XW.openOverlay('winOverlay');
+      XW.emit('game_complete',{puzzleId:puzId,seconds:XW.timer.secs,moves:moves});
+      XW.announce('All words found in '+moves+' turns.');
+      return;
+    }
+    /* Now that it is solved the word can be named — that is the reward. */
+    XW.toast('“'+word+'” — found it.');
+    XW.announce('“'+word+'” found. '+
+      LENS.filter(L=>solvedAt[L]===undefined).length+' to go.');
+    if(found===active){
+      const next=LENS.find(L=>solvedAt[L]===undefined);
+      if(next!==undefined) setTimeout(()=>{ if(!won) setActive(next); },900);
     }
   }
 
   /* ---------- hint ----------
-     Search from where the player actually is rather than replaying the stored
-     solution, because they may have wandered. Depth 4 with no immediate
-     repeats is a few thousand states — instant, and always enough given no
-     rung is generated deeper than four turns. */
-  function findMove(){
-    const R=P.rungs[rung], L=R.len, word=R.word;
-    for(let depth=1;depth<=4;depth++){
-      const found=dfs(T.clone(state),depth,'',L,word);
-      if(found) return found;
-    }
-    return '';
-  }
-  function dfs(st,depth,lastFace,L,word){
-    for(const m of T.MOVES){
-      if(m[0]===lastFace) continue;
-      const nx=T.clone(st);
-      T.applyMove(nx,m);
-      if(T.readWord(nx,'F',L)===word) return m;
-      if(depth>1&&dfs(nx,depth-1,m[0],L,word)) return m;
-    }
-    return '';
-  }
-
+     Asks the engine from wherever the player actually is; it searches nearby
+     and otherwise retraces their own turns back onto the planted route. */
   $('#hintBtn').onclick=()=>{
-    if(done[rung]) return;
-    const m=findMove();
+    if(solvedAt[active]!==undefined) return;
+    const m=T.nextMove(state,P.goals[active],hist);
     XW.emit('assist_used',{action:'hint'});
     if(!m){ XW.toast('Try Undo — that is further from the word than it looks.'); return; }
-    hintMove=m;
     const f=m[0], dir=m.length>1?'anticlockwise':'clockwise';
     XW.toast('Turn the '+FACE_LABEL[f].toLowerCase()+' face '+dir+'.');
     XW.announce('Hint: turn the '+FACE_LABEL[f]+' face '+dir+'.');
@@ -515,15 +564,24 @@
   $('#undoBtn').onclick=()=>{
     if(!hist.length||busy) return;
     const m=hist.pop();
-    moves++; rungMoves[rung]++;          /* an undo is a turn; it still costs */
+    moves++;                             /* an undo is a turn; it still costs */
     turn(T.invert(m),false);
   };
+  /* Restart puts the one cube back to how it was dealt. Words already found
+     stay found — you earned those. */
   $('#resetBtn').onclick=()=>{
-    XW.dialog('Start again','Put this word back the way it started?',()=>{
+    XW.dialog('Start again','Put the cube back the way it was dealt?',()=>{
       XW.closeOverlay($('#dialogOverlay'));
-      rungMoves[rung]=0;
-      loadRung(rung);
+      state=T.clone(P.start);
+      hist=[];
+      paint();
+      XW.announce('Cube reset to the start.');
     },{ok:'Restart',cancel:'Cancel'});
+  };
+  /* The view, not the puzzle — put the camera back where it began. */
+  $('#viewReset').onclick=()=>{
+    ax=AX_HOME; ay=AY_HOME; applyOrbit();
+    XW.announce('View reset.');
   };
 
   /* ---------- move pad ---------- */
@@ -569,7 +627,13 @@
   /* A gentle tilt on purpose: the word lives on the front face, so that face
      stays close to square and readable, and the top and right are angled just
      enough to see what is coming. */
-  let ax=-20, ay=-28, drag=null;
+  /* Vertical tilt is bounded because it is the axis that runs out of room; at
+     34 degrees the projection is about 1.4x the cube, inside the 1.5x the
+     scene reserves. Turning all the way round horizontally costs nothing, so
+     that stays free. */
+  const AX_MAX=34;
+  const AX_HOME=-20, AY_HOME=-28;      /* what "Reset view" goes back to */
+  let ax=AX_HOME, ay=AY_HOME, drag=null;
   const applyOrbit=()=>{ cubeEl.style.setProperty('--ax',ax+'deg');
                          cubeEl.style.setProperty('--ay',ay+'deg'); };
   const scene=$('#scene');
@@ -578,7 +642,7 @@
   scene.addEventListener('pointermove',e=>{
     if(!drag) return;
     ay=drag.ay+(e.clientX-drag.x)*.5;
-    ax=Math.max(-80,Math.min(80,drag.ax-(e.clientY-drag.y)*.5));
+    ax=Math.max(-AX_MAX,Math.min(AX_MAX,drag.ax-(e.clientY-drag.y)*.5));
     applyOrbit();
   });
   const endDrag=()=>{ drag=null; };
@@ -597,25 +661,19 @@
     if(f){ e.preventDefault(); turn(f+(e.shiftKey?"'":'')); return; }
     if(e.key==='ArrowLeft'){ e.preventDefault(); ay-=12; applyOrbit(); }
     else if(e.key==='ArrowRight'){ e.preventDefault(); ay+=12; applyOrbit(); }
-    else if(e.key==='ArrowUp'){ e.preventDefault(); ax=Math.max(-80,ax-12); applyOrbit(); }
-    else if(e.key==='ArrowDown'){ e.preventDefault(); ax=Math.min(80,ax+12); applyOrbit(); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); ax=Math.max(-AX_MAX,ax-12); applyOrbit(); }
+    else if(e.key==='ArrowDown'){ e.preventDefault(); ax=Math.min(AX_MAX,ax+12); applyOrbit(); }
     else if(e.key==='z'&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); $('#undoBtn').click(); }
   });
 
   /* ---------- sizing ----------
      The cube scales to whatever the frame gives us, bounded so the stack
      always fits without scrolling — the same rule the other two players use. */
-  /* A tilted cube draws well outside its own box, and the reader can drag to
-     any angle, so sizing has to assume the worst orientation rather than the
-     starting one. At 45/45 the projection is about 1.41x the cube on each
-     axis; perspective on the near corner adds a little more. SPREAD is that
-     ceiling, and both the cube and the space reserved for it come from it —
-     which is why no device's chrome can crop a corner off. Measured rather
-     than reasoned: at 45/45 the drawn extent came to 1.69x the cube, so this
-     carries a margin over that. The scene reserves cs*SPREAD and the cube is
-     availH/SPREAD, so the two stay consistent — the scene fills exactly the
-     height there is, and the cube fits inside it at any orientation. */
-  const SPREAD=1.8;
+  /* Reserve room for the cube as it actually sits, not for the most extreme
+     angle it could ever be dragged to — sizing for the worst case cost 20% of
+     the stack's height and cropped the caption off the bottom. The tilt is
+     bounded instead (see AX_MAX), which keeps the projection inside this
+     reserve without taking anything away from the layout. */
   function size(){
     const mob=window.matchMedia('(max-width:860px)').matches;
     const w=$('.stage').clientWidth||320;
@@ -623,13 +681,13 @@
     const chrome=($('.topbar').offsetHeight||0)+dock+
                  ($('#prompt').offsetHeight||0)+($('#tiles').offsetHeight||0)+
                  ($('#pad').offsetHeight||0)+($('#caption').offsetHeight||0)+
-                 (mob?($('#ladderMob').offsetHeight||0):0)+72;
-    const availH=Math.max(120,(window.innerHeight||600)-chrome);
-    const cs=Math.max(84,Math.min(mob?218:250,w/SPREAD,availH/SPREAD));
+                 (mob?($('#ladderMob').offsetHeight||0):0)+96;
+    const availH=Math.max(150,(window.innerHeight||600)-chrome);
+    const cs=Math.max(96,Math.min(mob?230:250,Math.min(w*.62,availH/1.5)));
     cubeEl.style.setProperty('--cs',cs+'px');
     cubeEl.style.setProperty('--cell',(cs/3)+'px');
     cubeEl.style.setProperty('--half',(cs/2)+'px');
-    $('#scene').style.setProperty('--scene-h',Math.ceil(cs*SPREAD)+'px');
+    $('#scene').style.setProperty('--scene-h',Math.round(cs*1.5)+'px');
   }
   addEventListener('resize',size);
   /* mobile browsers change the visible height as their chrome slides away */
@@ -638,21 +696,27 @@
   /* ---------- persistence ---------- */
   function save(){
     XW.storage.save(puzId,{
-      rung:rung, hist:hist.join(' '), moves:moves, rungMoves:rungMoves.join(','),
-      done:done.map(d=>d?1:0).join(''), elapsed:XW.timer.secs, completed:won,
-      filled:done.filter(Boolean).length, total:P.rungs.length
+      active:active, hist:hist.join(' '), moves:moves,
+      /* "4:3,5:8" — which words are found and at what turn count */
+      solved:LENS.filter(L=>solvedAt[L]!==undefined).map(L=>L+':'+solvedAt[L]).join(','),
+      elapsed:XW.timer.secs, completed:won,
+      filled:LENS.filter(L=>solvedAt[L]!==undefined).length, total:LENS.length
     });
   }
   function load(){
     const st=XW.storage.load(puzId); if(!st) return;
-    if(typeof st.done==='string') done=st.done.split('').map(c=>c==='1');
-    if(typeof st.rungMoves==='string') rungMoves=st.rungMoves.split(',').map(Number);
+    if(typeof st.solved==='string'&&st.solved){
+      st.solved.split(',').forEach(pair=>{
+        const [L,at]=pair.split(':').map(Number);
+        if(LENS.indexOf(L)>=0) solvedAt[L]=at||0;
+      });
+    }
     moves=st.moves||0;
     won=!!st.completed;
-    rung=Math.min(P.rungs.length-1,Math.max(0,st.rung||0));
+    if(LENS.indexOf(st.active)>=0) active=st.active;
     XW.timer.secs=st.elapsed||0;
-    /* replay the stored turns so the cube comes back exactly as it was */
-    state=T.clone(P.rungs[rung].start);
+    /* replay the stored turns so the one cube comes back exactly as it was */
+    state=T.clone(P.start);
     if(typeof st.hist==='string'&&st.hist){
       hist=st.hist.split(' ').filter(Boolean);
       hist.forEach(m=>T.applyMove(state,m));
@@ -674,16 +738,15 @@
         XW.dialog('Start again','Reset all three words and the clock?',()=>{
           XW.closeOverlay($('#dialogOverlay'));
           XW.storage.clear(puzId);
-          done=[false,false,false]; rungMoves=[0,0,0]; moves=0; won=false;
+          LENS.forEach(L=>delete solvedAt[L]); moves=0; won=false;
           XW.timer.reset(); XW.timer.stopped=false;
-          loadRung(0);
+          state=T.clone(P.start); hist=[]; active=LENS[0]; paint();
         },{ok:'Restart',cancel:'Cancel'});
       }
     }
   });
   $('#settingsBtn').onclick=()=>XW.openOverlay('settingsOverlay');
   $('#applySettings').onclick=()=>{
-    opts.slots=$('#optSlots').checked;
     opts.anim=$('#optAnim').checked;
     $('#timerPill').classList.toggle('collapsed',!$('#optTimerShown').checked);
     XW.closeOverlay($('#settingsOverlay'));
@@ -704,7 +767,7 @@
 
   /* ---------- boot ---------- */
   buildCube();
-  state=T.clone(P.rungs[0].start);
+  state=T.clone(P.start);
   load();
   applyOrbit();
   paint();
