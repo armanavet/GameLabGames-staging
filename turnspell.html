@@ -23,20 +23,29 @@
      rotation prepended to the stickers in that layer, which is why nothing
      here needs to know about faces as containers. */
   .scene{width:100%;display:flex;align-items:center;justify-content:center;
-         perspective:1100px;touch-action:none;cursor:grab;
+         perspective:1500px;touch-action:none;cursor:grab;
          height:var(--scene-h,320px);flex:none}
   .scene:active{cursor:grabbing}
   .scene:focus-visible{outline:2px solid var(--focus);outline-offset:4px;border-radius:12px}
   .cube{position:relative;transform-style:preserve-3d;
         width:var(--cs,210px);height:var(--cs,210px);
+        --sz:calc(var(--cell,70px) - 3px);
         transform:rotateX(var(--ax,-20deg)) rotateY(var(--ay,-28deg))}
-  /* A solid dark body just under the stickers. Without it the gaps between
-     stickers are holes you can see through the cube, which reads as broken
-     rather than as a cube. Real ones are black plastic inside; so is this. */
-  .bf{position:absolute;left:50%;top:50%;
-      margin:calc(var(--cs,210px) / -2) 0 0 calc(var(--cs,210px) / -2);
-      width:var(--cs,210px);height:var(--cs,210px);
-      background:#242424;border-radius:4px;backface-visibility:hidden}
+
+  /* Every sticker carries its own dark backing rather than the cube having one
+     solid dark body. That matters during a turn: a monolithic body stays put
+     while the rim stickers sweep away from it, so for a moment you see a big
+     black panel where the letters were — the cube appears to flash black. A
+     per-sticker backing rotates with its sticker, so nothing static is ever
+     exposed, and because it is double-sided it also supplies the black
+     plastic you should see through the gaps and into the cube. */
+  .sb{position:absolute;left:50%;top:50%;
+      margin:calc(var(--sz) / -2) 0 0 calc(var(--sz) / -2);
+      width:var(--sz);height:var(--sz);border-radius:3px;
+      background:#2b2b2b;box-sizing:border-box;
+      transition:transform .26s cubic-bezier(.4,.05,.2,1);
+      transform:var(--lr,rotate(0deg)) var(--pl,translateZ(0)) translateZ(-3px)}
+  .sb.nofx{transition:none}
 
   /* A sticker reads like a sudoku cell: white ground, dark rules, dark letter.
      That is deliberate — it keeps Turnspell in the same family as the other
@@ -44,8 +53,7 @@
   /* Stickers sit a little inside their cell, so the cube has the gaps a real
      one does and adjacent faces stop colliding along the shared edges. The
      cell pitch is unchanged — only the tile is smaller. */
-  .st{--sz:calc(var(--cell,70px) - 3px);
-      position:absolute;left:50%;top:50%;margin:calc(var(--sz) / -2) 0 0 calc(var(--sz) / -2);
+  .st{position:absolute;left:50%;top:50%;margin:calc(var(--sz) / -2) 0 0 calc(var(--sz) / -2);
       width:var(--sz);height:var(--sz);border-radius:3px;
       display:flex;align-items:center;justify-content:center;
       font-weight:700;font-size:calc(var(--cell,70px) * .4);line-height:1;
@@ -307,19 +315,21 @@
   app.insertBefore($('.topbar'),$('.main'));
 
   /* ---------- build the 54 stickers ---------- */
-  const cubeEl=$('#cube'), els=[];
+  const cubeEl=$('#cube'), els=[], backs=[];
   const faceOf=n=>T.FACE_IDS.find(f=>{const N=T.FACES[f].n;return N[0]===n[0]&&N[1]===n[1]&&N[2]===n[2];});
+  /* one placement drives a sticker and the dark tile behind it */
+  const setPlace=(i,pl)=>{ els[i].style.setProperty('--pl',pl); backs[i].style.setProperty('--pl',pl); };
+  const setLayer=(i,lr)=>{ els[i].style.setProperty('--lr',lr); backs[i].style.setProperty('--lr',lr); };
+  const setFx=(i,off)=>{ els[i].classList.toggle('nofx',off); backs[i].classList.toggle('nofx',off); };
 
   function buildCube(){
-    cubeEl.innerHTML=''; els.length=0;
-    /* the black body first, so every sticker paints on top of it */
-    T.FACE_IDS.forEach(f=>{
+    cubeEl.innerHTML=''; els.length=0; backs.length=0;
+    /* backings first so every letter tile paints in front of them */
+    for(let i=0;i<54;i++){
       const b=document.createElement('div');
-      b.className='bf';
-      b.style.transform=(FACE_ROT[f]?FACE_ROT[f]+' ':'')+
-                        'translateZ(calc(var(--cs) / 2 - 2px))';
-      cubeEl.appendChild(b);
-    });
+      b.className='sb'; b.setAttribute('aria-hidden','true');
+      cubeEl.appendChild(b); backs.push(b);
+    }
     for(let i=0;i<54;i++){
       const d=document.createElement('div');
       d.className='st';
@@ -345,8 +355,8 @@
     const front=T.faceLetters(state,'F');
     state.forEach((st,i)=>{
       const el=els[i], f=faceOf(st.n), slot=T.slotOf(f,st.p);
-      el.style.setProperty('--pl',placement(st));
-      el.style.setProperty('--lr','rotate(0deg)');
+      setPlace(i,placement(st));
+      setLayer(i,'rotate(0deg)');
       el.querySelector('.ch').textContent=st.ch;
       const isSlot=(f==='F'&&slot<L);
       el.classList.toggle('slot',isSlot&&opts.slots);
@@ -413,18 +423,18 @@
 
     const commit=()=>{
       T.applyMove(state,move);
-      affected.forEach(i=>els[i].classList.add('nofx'));
+      affected.forEach(i=>setFx(i,true));
       paint();
       /* one forced reflow so the reset transform is not itself animated */
       void cubeEl.offsetWidth;
-      affected.forEach(i=>els[i].classList.remove('nofx'));
+      affected.forEach(i=>setFx(i,false));
       busy=false;
       checkWin();
     };
 
     if(!opts.anim||window.matchMedia('(prefers-reduced-motion: reduce)').matches){ commit(); return; }
     busy=true;
-    affected.forEach(i=>els[i].style.setProperty('--lr',css));
+    affected.forEach(i=>setLayer(i,css));
     setTimeout(commit,270);
   }
 
@@ -595,6 +605,17 @@
   /* ---------- sizing ----------
      The cube scales to whatever the frame gives us, bounded so the stack
      always fits without scrolling — the same rule the other two players use. */
+  /* A tilted cube draws well outside its own box, and the reader can drag to
+     any angle, so sizing has to assume the worst orientation rather than the
+     starting one. At 45/45 the projection is about 1.41x the cube on each
+     axis; perspective on the near corner adds a little more. SPREAD is that
+     ceiling, and both the cube and the space reserved for it come from it —
+     which is why no device's chrome can crop a corner off. Measured rather
+     than reasoned: at 45/45 the drawn extent came to 1.69x the cube, so this
+     carries a margin over that. The scene reserves cs*SPREAD and the cube is
+     availH/SPREAD, so the two stay consistent — the scene fills exactly the
+     height there is, and the cube fits inside it at any orientation. */
+  const SPREAD=1.8;
   function size(){
     const mob=window.matchMedia('(max-width:860px)').matches;
     const w=$('.stage').clientWidth||320;
@@ -602,16 +623,17 @@
     const chrome=($('.topbar').offsetHeight||0)+dock+
                  ($('#prompt').offsetHeight||0)+($('#tiles').offsetHeight||0)+
                  ($('#pad').offsetHeight||0)+($('#caption').offsetHeight||0)+
-                 (mob?($('#ladderMob').offsetHeight||0):0)+96;
-    const availH=Math.max(150,(window.innerHeight||600)-chrome);
-    /* a cube drawn at size S needs roughly 1.5S of room once it is tilted */
-    const cs=Math.max(96,Math.min(mob?230:250,Math.min(w*.62,availH/1.5)));
+                 (mob?($('#ladderMob').offsetHeight||0):0)+72;
+    const availH=Math.max(120,(window.innerHeight||600)-chrome);
+    const cs=Math.max(84,Math.min(mob?218:250,w/SPREAD,availH/SPREAD));
     cubeEl.style.setProperty('--cs',cs+'px');
     cubeEl.style.setProperty('--cell',(cs/3)+'px');
     cubeEl.style.setProperty('--half',(cs/2)+'px');
-    $('#scene').style.setProperty('--scene-h',Math.round(cs*1.5)+'px');
+    $('#scene').style.setProperty('--scene-h',Math.ceil(cs*SPREAD)+'px');
   }
   addEventListener('resize',size);
+  /* mobile browsers change the visible height as their chrome slides away */
+  if(window.visualViewport) visualViewport.addEventListener('resize',size);
 
   /* ---------- persistence ---------- */
   function save(){
