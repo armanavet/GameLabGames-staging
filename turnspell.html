@@ -281,7 +281,7 @@
   </div></div>
 
   <div id="menuScrim"></div>
-  <div id="toast" role="status" aria-live="polite"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
   <div id="live" class="sr-only" role="status" aria-live="polite"></div>
 </div>
 
@@ -549,17 +549,18 @@
   /* ---------- hint ----------
      Asks the engine from wherever the player actually is; it searches nearby
      and otherwise retraces their own turns back onto the planted route. */
+  /* Hint plays the turn rather than describing it. It still says which turn it
+     was, so the reader can follow the reasoning and pick it up themselves —
+     and it counts as a turn, because the cube really did move. */
   $('#hintBtn').onclick=()=>{
-    if(solvedAt[active]!==undefined) return;
+    if(busy||solvedAt[active]!==undefined) return;
     const m=T.nextMove(state,P.goals[active],hist);
     XW.emit('assist_used',{action:'hint'});
     if(!m){ XW.toast('Try Undo — that is further from the word than it looks.'); return; }
     const f=m[0], dir=m.length>1?'anticlockwise':'clockwise';
-    XW.toast('Turn the '+FACE_LABEL[f].toLowerCase()+' face '+dir+'.');
-    XW.announce('Hint: turn the '+FACE_LABEL[f]+' face '+dir+'.');
-    const btn=document.querySelector('[data-move="'+m+'"]');
-    if(btn){ btn.style.background='var(--active)';
-             setTimeout(()=>{btn.style.background='';},1400); }
+    turn(m);
+    XW.toast('Turned the '+FACE_LABEL[f].toLowerCase()+' face '+dir+'.');
+    XW.announce('Hint: turned the '+FACE_LABEL[f]+' face '+dir+'.');
   };
   $('#undoBtn').onclick=()=>{
     if(!hist.length||busy) return;
