@@ -165,6 +165,12 @@
     .ladder.mob .rung{flex:1;flex-direction:column;gap:4px;padding:6px 4px;align-items:center}
     .ladder.mob .rung .len{width:auto}
     .ladder.mob .mini i{width:9px;height:12px}
+    /* Hold the tick's line whether or not it says anything yet, so a solve
+       never changes the row's height. Same reason the prompt reserves two
+       lines: its longest wording wraps to two on a phone, and letting it
+       shrink to one on a solve would resize the cube under the reader. */
+    .ladder.mob .rung .tick{min-height:13px;line-height:13px}
+    .prompt{line-height:1.45;min-height:2.9em}
     .tile{width:32px;height:32px;font-size:16px}
   }
   @media(min-width:861px){ .ladder.mob{display:none} }
@@ -461,10 +467,12 @@
           mini.appendChild(c);
         }
         b.appendChild(len); b.appendChild(mini);
-        if(solved){
-          const t=document.createElement('span'); t.className='tick';
-          t.textContent='✓ '+solvedAt[L]; b.appendChild(t);
-        }
+        /* The tick line is always here, empty until the word falls. Adding it
+           only on a solve made the row taller mid-game, which pushed the
+           ladder under the mobile dock and clipped it. */
+        const t=document.createElement('span'); t.className='tick';
+        t.textContent=solved?('✓ '+solvedAt[L]):'';
+        b.appendChild(t);
         b.setAttribute('aria-label',L+'-letter word, '+
           (solved?'found in '+solvedAt[L]+' turns'
                  :m.filter(x=>x==='exact').length+' of '+L+' letters in place'));
