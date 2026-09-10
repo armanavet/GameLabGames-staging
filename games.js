@@ -73,6 +73,35 @@
     return '<svg viewBox="0 0 35 35" aria-hidden="true">' + out + '</g></svg>';
   })();
 
+  /* Turnspell's mark: an isometric letter cube, generated rather than
+     hand-plotted so the hub card and the 35px archive row are provably the
+     same drawing at two sizes and two inks. Every measure is a fraction of
+     the viewBox, so the shape holds however it is scaled. */
+  const isoCube = (S, ink, sw) => {
+    const cx = S / 2, w = .327 * S, h = .192 * S, d = .385 * S, ty = .115 * S;
+    const T = [cx, ty], R = [cx + w, ty + h], B = [cx, ty + 2 * h], L = [cx - w, ty + h];
+    const n = p => p.map(v => +v.toFixed(2)).join(' ');
+    const add = (p, u, s) => [p[0] + u[0] * s, p[1] + u[1] * s];
+    let path = '';
+    /* one face = its outline plus the two rules each way that make it a 3x3 */
+    const face = (o, u, v) => {
+      path += 'M' + n(o) + 'L' + n(add(o, u, 1)) + 'L' + n(add(add(o, u, 1), v, 1)) +
+              'L' + n(add(o, v, 1)) + 'z';
+      for (let k = 1; k < 3; k++) {
+        path += 'M' + n(add(o, u, k / 3)) + 'L' + n(add(add(o, u, k / 3), v, 1));
+        path += 'M' + n(add(o, v, k / 3)) + 'L' + n(add(add(o, v, k / 3), u, 1));
+      }
+    };
+    face(T, [w, h], [-w, h]);      // top
+    face(L, [w, h], [0, d]);       // left
+    face(B, [w, -h], [0, d]);      // right
+    return '<svg viewBox="0 0 ' + S + ' ' + S + '" aria-hidden="true">' +
+      '<path d="' + path + '" fill="none" stroke="' + ink + '" stroke-width="' + sw +
+      '" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+  };
+  const cubeArt = isoCube(52, 'currentColor', 2);
+  const cubeRow = isoCube(35, ROW_INK, 1.4);
+
   const nums = n => {
     let out = '<g fill="none" stroke="currentColor" stroke-width="1.8">' +
               '<rect x="4" y="4" width="44" height="44" rx="3"/>';
@@ -121,6 +150,10 @@
     mini:       '#ffe7cd',
     sudoku:     '#00a8f0',   // azure, from the Sudoku frames
     'sudoku-x': '#0b76b8',   // the same azure, deeper
+    /* Turnspell opens a third family rather than crowding either of the two
+       above: an emerald next to the green a correct letter turns, so the card
+       and the board agree about what "right" looks like. */
+    turnspell:  '#12a06b',
   };
 
   window.GAMES = {
@@ -191,6 +224,19 @@
       generated: { days: 30, size: '9x9', cells: 81, idPrefix: 'sudoku', level: 'impossible' },
       tint: TINT['sudoku-x'], tintInk: '#fff',
       art: nums(4), archiveArt: sudokuRow, live: true
+    },
+    /* Turnspell is generated like the sudoku — the date seeds the letters and
+       the scramble — so it has no manifest, no api and nothing to upload.
+       Three goal words a day, none of them more than four turns from solved:
+       the ladder supplies the difficulty, not the scramble depth. */
+    turnspell: {
+      label: 'Turnspell', short: 'Turnspell',
+      blurb: 'Turn the letter cube until the words appear.',
+      archiveBlurb: 'Turn the letter cube until the words appear.',
+      player: 'turnspell.html', archive: 'archive.html',
+      generated: { days: 30, size: '3x3x3', cells: 3 },
+      tint: TINT.turnspell, tintInk: '#fff',
+      art: cubeArt, archiveArt: cubeRow, live: true
     },
     editor: {
       label: 'Puzzle editor', short: 'Editor',

@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover"/>
+<title>Turnspell</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="core.css">
+<style>
+  /* turnspell-only styles — everything shared lives in core.css.
+     The board here is a 3D cube, but everything around it is the same chrome
+     the crossword and sudoku use: same toolbar, same rail, same overlays,
+     same mobile dock, same caption. */
+  #app{max-width:1040px}
+  .main{display:grid;grid-template-columns:1fr 264px;gap:28px;padding:18px 28px 12px;
+        flex:1 1 auto;min-height:0}
+  .stage{min-width:0;display:flex;flex-direction:column;align-items:center;gap:14px}
+
+  /* ---------- the cube ----------
+     54 stickers, each positioned in 3D by its own transform. A face turn is a
+     rotation prepended to the stickers in that layer, which is why nothing
+     here needs to know about faces as containers. */
+  .scene{width:100%;display:flex;align-items:center;justify-content:center;
+         perspective:1100px;touch-action:none;cursor:grab;
+         height:var(--scene-h,320px);flex:none}
+  .scene:active{cursor:grabbing}
+  .scene:focus-visible{outline:2px solid var(--focus);outline-offset:4px;border-radius:12px}
+  .cube{position:relative;transform-style:preserve-3d;
+        width:var(--cs,210px);height:var(--cs,210px);
+        transform:rotateX(var(--ax,-20deg)) rotateY(var(--ay,-28deg))}
+  /* A solid dark body just under the stickers. Without it the gaps between
+     stickers are holes you can see through the cube, which reads as broken
+     rather than as a cube. Real ones are black plastic inside; so is this. */
+  .bf{position:absolute;left:50%;top:50%;
+      margin:calc(var(--cs,210px) / -2) 0 0 calc(var(--cs,210px) / -2);
+      width:var(--cs,210px);height:var(--cs,210px);
+      background:#242424;border-radius:4px;backface-visibility:hidden}
+
+  /* A sticker reads like a sudoku cell: white ground, dark rules, dark letter.
+     That is deliberate — it keeps Turnspell in the same family as the other
+     boards rather than looking like a different product. */
+  /* Stickers sit a little inside their cell, so the cube has the gaps a real
+     one does and adjacent faces stop colliding along the shared edges. The
+     cell pitch is unchanged — only the tile is smaller. */
+  .st{--sz:calc(var(--cell,70px) - 3px);
+      position:absolute;left:50%;top:50%;margin:calc(var(--sz) / -2) 0 0 calc(var(--sz) / -2);
+      width:var(--sz);height:var(--sz);border-radius:3px;
+      display:flex;align-items:center;justify-content:center;
+      font-weight:700;font-size:calc(var(--cell,70px) * .4);line-height:1;
+      color:var(--ink3);background:#fff;
+      box-sizing:border-box;backface-visibility:hidden;
+      transition:transform .26s cubic-bezier(.4,.05,.2,1), background .18s, color .18s;
+      transform:var(--lr,rotate(0deg)) var(--pl,translateZ(0))}
+  .st.nofx{transition:background .18s, color .18s}
+  /* Slots the goal word has to fill: tinted, numbered, and green once right. */
+  .st.slot{background:var(--band)}
+  .st.slot.ok{background:var(--ok);color:#fff;border-color:#0a7d4c}
+  .st .num{position:absolute;top:2px;left:4px;font-size:calc(var(--cell,70px) * .22);
+           font-weight:700;color:var(--xw-num,#8a5a1a);line-height:1}
+  .st.slot.ok .num{color:rgba(255,255,255,.85)}
+
+  /* ---------- prompt + goal tiles ---------- */
+  .prompt{font-size:14px;font-weight:600;color:var(--ink);text-align:center;margin:0}
+  .prompt b{font-weight:900}
+  .tiles{display:flex;gap:7px;justify-content:center;flex-wrap:wrap}
+  .tile{width:38px;height:38px;border-radius:5px;display:flex;align-items:center;justify-content:center;
+        font-size:19px;font-weight:700;background:#efefef;color:var(--ink3);border:1.5px solid #dcdcdc}
+  .tile.ok{background:var(--ok);border-color:#0a7d4c;color:#fff}
+  .caption{font-size:12.5px;color:#8a8a8a;text-align:center;margin:0}
+
+  /* ---------- move pad ----------
+     Face names, not Rubik's notation. The audience is a newspaper reader, not
+     a speedcuber, and "Top ↺" needs no explaining where "U'" does. */
+  .pad{display:grid;grid-template-columns:auto 1fr 1fr;gap:6px 8px;align-items:center;
+       width:100%;max-width:290px}
+  .pad .ph{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+           color:#8a8a8a;text-align:center}
+  .pad .fl{font-size:12.5px;font-weight:700;color:var(--ink);text-align:right;padding-right:2px}
+  .mv{height:34px;border:1px solid var(--panel-line);background:#fff;border-radius:7px;
+      font-family:var(--font);font-size:16px;font-weight:700;color:var(--ink);cursor:pointer;
+      display:flex;align-items:center;justify-content:center;transition:background .12s}
+  .mv:hover{background:var(--band)}
+  .mv:active{background:var(--active)}
+
+  /* ---------- right rail (same shape as the sudoku's) ---------- */
+  .rail{display:flex;flex-direction:column;gap:14px;min-width:0}
+  .rbox{border:1px solid #e6e6e6;border-radius:var(--panel-radius);background:#fff;padding:12px}
+  .railhead{font-size:11px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;
+            color:#8a8a8a;text-align:center;margin-bottom:9px}
+  .prow{display:flex;gap:8px}
+  .pbtn{flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;padding:8px 4px;
+        border:none;background:none;font-family:var(--font);font-size:11.5px;font-weight:600;
+        color:var(--ink);cursor:pointer;border-radius:8px}
+  .pbtn svg{width:20px;height:20px}
+  .pbtn:hover:not(:disabled){background:#f4f4f4}
+  .pbtn:disabled{color:#c4c4c4;cursor:default}
+  .pbtn.hint{color:var(--wrong)}
+  .pbtn.hint:disabled{color:#e3b3b0}
+
+  /* ---------- the goal-word ladder ---------- */
+  .ladder{display:flex;flex-direction:column;gap:7px}
+  .rung{display:flex;align-items:center;gap:9px;padding:7px 9px;border:1.5px solid #e6e6e6;
+        border-radius:9px;background:#fff;cursor:pointer;text-align:left;font-family:var(--font)}
+  .rung:hover{border-color:var(--line)}
+  .rung.on{border-color:var(--ink);background:#fbfbfb}
+  .rung.won{background:var(--ok-bg);border-color:#a9e2c4}
+  .rung .len{font-size:11.5px;font-weight:700;color:#8a8a8a;width:12px;flex:none}
+  .rung .mini{display:flex;gap:3px;flex:1}
+  .rung .mini i{width:15px;height:18px;border-radius:3px;background:#efefef;
+                display:block;flex:none}
+  .rung .mini i.ok{background:var(--ok)}
+  .rung .tick{font-size:11px;font-weight:700;color:var(--ok-ink);flex:none}
+
+  /* ---------- mobile ---------- */
+  #mobiledock{display:none}
+  @media(max-width:860px){
+    .main{grid-template-columns:1fr;gap:12px;padding:10px 12px 4px}
+    .rail{display:none}
+    /* The stack has to fit the viewport without scrolling, exactly as the
+       other two players do — so the cube takes whatever height is left. */
+    #mobiledock{display:flex;flex-direction:column;gap:10px;padding:8px 12px 14px;flex:none;
+                border-top:1px solid #ececec;background:#fff}
+    #mobiledock .prow{justify-content:space-between}
+    #mobiledock .pad{max-width:none;margin:0 auto;max-width:320px}
+    .ladder.mob{display:flex;flex-direction:row;gap:6px}
+    .ladder.mob .rung{flex:1;flex-direction:column;gap:4px;padding:6px 4px;align-items:center}
+    .ladder.mob .rung .len{width:auto}
+    .ladder.mob .mini i{width:9px;height:12px}
+    .tile{width:32px;height:32px;font-size:16px}
+  }
+  @media(min-width:861px){ .ladder.mob{display:none} }
+  @media(prefers-reduced-motion:reduce){ .st{transition:background .18s,color .18s} }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="main">
+    <div class="stage">
+      <div class="scene" id="scene" tabindex="0" role="application"
+           aria-label="Letter cube. Drag to look around; use the turn buttons to rotate a face.">
+        <div class="cube" id="cube"></div>
+      </div>
+      <p class="prompt" id="prompt">&mdash;</p>
+      <div class="tiles" id="tiles"></div>
+      <div class="pad" id="pad"></div>
+      <div class="ladder mob" id="ladderMob"></div>
+      <p class="caption" id="caption"></p>
+    </div>
+
+    <div class="rail">
+      <div class="rbox">
+        <div class="prow">
+          <button class="pbtn" type="button" id="undoBtn"><svg aria-hidden="true"><use href="icons.svg#i-undo"/></svg>Undo</button>
+          <button class="pbtn" type="button" id="resetBtn"><svg aria-hidden="true"><use href="icons.svg#i-redo"/></svg>Restart</button>
+          <button class="pbtn hint" type="button" id="hintBtn"><svg aria-hidden="true"><use href="icons.svg#i-lifebuoy"/></svg>Hint</button>
+        </div>
+      </div>
+      <div class="rbox">
+        <div class="railhead">Goal words</div>
+        <div class="ladder" id="ladder"></div>
+      </div>
+    </div>
+  </div>
+
+  <div id="mobiledock">
+    <div class="prow" id="mobRow"></div>
+  </div>
+
+  <!-- Settings -->
+  <div class="overlay" id="settingsOverlay"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="dlgH-set">
+    <div class="mhead"><h2 id="dlgH-set">Settings</h2>
+      <button class="mclose" type="button" data-close aria-label="Close"><svg width="24" height="24" aria-hidden="true"><use href="icons.svg#i-close"/></svg></button></div>
+    <div class="mbody">
+      <div class="sgroup">
+        <div class="srow"><div class="lab"><b>Show timer</b><span>Shows the timer while playing this puzzle</span></div>
+          <label class="sw"><input type="checkbox" id="optTimerShown" checked/><i></i></label></div>
+        <div class="srow"><div class="lab"><b>Highlight goal squares</b><span>Tints the squares the word has to fill</span></div>
+          <label class="sw"><input type="checkbox" id="optSlots" checked/><i></i></label></div>
+        <div class="srow"><div class="lab"><b>Animate turns</b><span>Turn this off if the cube feels slow on your device</span></div>
+          <label class="sw"><input type="checkbox" id="optAnim" checked/><i></i></label></div>
+      </div>
+    </div>
+    <div class="mbtns"><button class="btn pri" type="button" id="applySettings">Apply</button></div>
+  </div></div>
+
+  <!-- How to play -->
+  <div class="overlay" id="howtoOverlay"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="dlgH-howto">
+    <div class="mhead"><h2 id="dlgH-howto">How To Play</h2>
+      <button class="mclose" type="button" data-close aria-label="Close"><svg width="24" height="24" aria-hidden="true"><use href="icons.svg#i-close"/></svg></button></div>
+    <div class="mbody">
+      <p>Every square on the cube carries a letter. Turn the faces until the goal word appears on the <b>front face</b>, reading left to right, top to bottom.</p>
+      <p>The tinted squares are the ones the word has to fill &mdash; they are numbered in reading order. A square turns <b>green</b> when it holds the right letter.</p>
+      <p>Use the turn buttons, or the keys <b>T</b>&nbsp;/&nbsp;<b>B</b>&nbsp;/&nbsp;<b>L</b>&nbsp;/&nbsp;<b>R</b>&nbsp;/&nbsp;<b>F</b>&nbsp;/&nbsp;<b>K</b> for top, bottom, left, right, front and back. Hold <b>Shift</b> to turn the other way. Drag the cube to look around it.</p>
+      <p>There are three goal words each day, and none of them is ever more than a few turns away. Your score is the number of turns you take and the time on the clock.</p>
+    </div>
+    <div class="mbtns"><button class="btn pri" type="button" data-close>Got it</button></div>
+  </div></div>
+
+  <!-- Support -->
+  <div class="overlay" id="supportOverlay"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="dlgH-support">
+    <div class="mhead"><h2 id="dlgH-support">Support</h2>
+      <button class="mclose" type="button" data-close aria-label="Close"><svg width="24" height="24" aria-hidden="true"><use href="icons.svg#i-close"/></svg></button></div>
+    <div class="mbody">
+      <p>Something not working? Quote the ticket number below and we can look up this exact puzzle.</p>
+      <p><b>Ticket number: <span id="ticketNo">&mdash;</span></b></p>
+      <p id="copyrightLine">&copy; 2026 Tribune Content Agency, LLC</p>
+    </div>
+    <div class="mbtns"><button class="btn pri" type="button" data-close>Close</button></div>
+  </div></div>
+
+  <!-- Win -->
+  <div class="overlay" id="winOverlay"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="dlgH-win">
+    <div class="mhead"><h2 id="dlgH-win">Congratulations!</h2>
+      <button class="mclose" type="button" data-close aria-label="Close"><svg width="24" height="24" aria-hidden="true"><use href="icons.svg#i-close"/></svg></button></div>
+    <div class="mbody center">
+      <p id="winLine">You spelled all three words. Keep playing!</p>
+      <div class="stats">
+        <div class="stat"><span>Turns</span><b id="winMoves">0</b></div>
+        <div class="stat"><span>Time</span><b id="winTime">&mdash;</b></div>
+      </div>
+    </div>
+    <div class="mbtns"><button class="btn pri" type="button" id="winShare">Share</button></div>
+    <p class="winnext"><button type="button" id="winMore">More puzzles</button></p>
+  </div></div>
+
+  <!-- shared confirm/notice -->
+  <div class="overlay" id="dialogOverlay"><div class="modal" role="dialog" aria-modal="true" aria-labelledby="dlgTitle">
+    <div class="mhead"><h2 id="dlgTitle">&mdash;</h2>
+      <button class="mclose" type="button" data-close aria-label="Close"><svg width="24" height="24" aria-hidden="true"><use href="icons.svg#i-close"/></svg></button></div>
+    <div class="mbody center"><p id="dlgBody">&mdash;</p></div>
+    <div class="mbtns">
+      <button class="btn sec" type="button" id="dlgClose">Close</button>
+      <button class="btn pri" type="button" id="dlgOk">Ok</button>
+    </div>
+  </div></div>
+
+  <div id="menuScrim"></div>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <div id="live" class="sr-only" role="status" aria-live="polite"></div>
+</div>
+
+<script src="games.js"></script>
+<script src="core.js"></script>
+<script src="turnspell-engine.js"></script>
+<script>
+(function(){
+  'use strict';
+  const $=XW.$, T=window.TURNSPELL;
+
+  (function(){
+    const want=new URLSearchParams(location.search).get('game')||'turnspell';
+    const g=window.GAMES&&window.GAMES[want];
+    XW.gameId=(g&&g.live&&g.player==='turnspell.html')?want:'turnspell';
+  })();
+
+  /* ---------- which puzzle ----------
+     Nothing is fetched: the date is the puzzle. A future date is refused
+     rather than generated, the same guarantee the sudoku gives. */
+  const params=new URLSearchParams(location.search);
+  const today=T.todayISO();
+  const parsed=T.parseId(params.get('p')||'');
+  const asked=(parsed&&parsed.date)||today;
+  const iso=(asked>today)?today:asked;
+  const substituted=(asked>today)?asked:null;
+
+  const P=T.forDate(iso), puzId=P.id;
+  XW.puzzleId=puzId;
+  document.title='Turnspell — '+iso;
+
+  const DOW=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const MON=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  (function(){
+    const d=new Date(iso+'T00:00:00');
+    const G=(window.GAMES&&window.GAMES[XW.gameId])||{};
+    $('#caption').textContent='L. A. Times '+(G.label||'Turnspell')+' · '+
+      DOW[d.getDay()]+', '+MON[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear();
+  })();
+
+  /* ---------- state ---------- */
+  let rung=0, state=null, hist=[], moves=0, rungMoves=[0,0,0], done=[false,false,false];
+  let won=false, hintMove='';
+  const opts={slots:true, anim:true};
+
+  /* Face names rather than notation, in the order a reader scans them. */
+  const FACE_LABEL={U:'Top',D:'Bottom',L:'Left',R:'Right',F:'Front',B:'Back'};
+  const PAD_ORDER=['U','F','R','L','B','D'];
+  /* The CSS rotation that matches a clockwise turn of each face, in cube
+     space. Axis and angle are kept apart so a prime turn is an honest sign
+     flip rather than string surgery on "rotateY(-90deg)". */
+  const LAYER_AXIS={U:'Y',D:'Y',R:'X',L:'X',F:'Z',B:'Z'};
+  const LAYER_DEG={U:-90,D:90,R:90,L:-90,F:90,B:-90};
+  const layerCss=(f,prime)=>'rotate'+LAYER_AXIS[f]+'('+(prime?-LAYER_DEG[f]:LAYER_DEG[f])+'deg)';
+  const FACE_ROT={F:'',B:'rotateY(180deg)',R:'rotateY(90deg)',
+                  L:'rotateY(-90deg)',U:'rotateX(90deg)',D:'rotateX(-90deg)'};
+
+  /* ---------- shared chrome ---------- */
+  const app=document.getElementById('app');
+  XW.mountToolbar(app,{
+    left:['timer',{id:'moves',kind:'pill',icon:'i-redo',size:15,text:'0',label:'Turns taken'}],
+    right:['settings','menu'],
+    menuItems:[['more','More puzzles'],['howto','How to play'],['restart','Start again'],
+               ['share','Share'],['support','Support']]
+  });
+  app.insertBefore($('.topbar'),$('.main'));
+
+  /* ---------- build the 54 stickers ---------- */
+  const cubeEl=$('#cube'), els=[];
+  const faceOf=n=>T.FACE_IDS.find(f=>{const N=T.FACES[f].n;return N[0]===n[0]&&N[1]===n[1]&&N[2]===n[2];});
+
+  function buildCube(){
+    cubeEl.innerHTML=''; els.length=0;
+    /* the black body first, so every sticker paints on top of it */
+    T.FACE_IDS.forEach(f=>{
+      const b=document.createElement('div');
+      b.className='bf';
+      b.style.transform=(FACE_ROT[f]?FACE_ROT[f]+' ':'')+
+                        'translateZ(calc(var(--cs) / 2 - 2px))';
+      cubeEl.appendChild(b);
+    });
+    for(let i=0;i<54;i++){
+      const d=document.createElement('div');
+      d.className='st';
+      const num=document.createElement('span'); num.className='num'; num.setAttribute('aria-hidden','true');
+      const v=document.createElement('span'); v.className='ch';
+      d.appendChild(num); d.appendChild(v);
+      cubeEl.appendChild(d); els.push(d);
+    }
+  }
+
+  /* A sticker's placement: rotate to its face, push out to the surface, then
+     slide to its cell. Recomputed after every turn — the DOM node stays put
+     and only its transform changes. */
+  function placement(st){
+    const f=faceOf(st.n), slot=T.slotOf(f,st.p);
+    const row=Math.floor(slot/3), col=slot%3;
+    return (FACE_ROT[f]?FACE_ROT[f]+' ':'')+'translateZ(var(--half)) '+
+           'translate(calc(var(--cell) * '+(col-1)+'), calc(var(--cell) * '+(row-1)+'))';
+  }
+
+  function paint(){
+    const R=P.rungs[rung], L=R.len, word=R.word;
+    const front=T.faceLetters(state,'F');
+    state.forEach((st,i)=>{
+      const el=els[i], f=faceOf(st.n), slot=T.slotOf(f,st.p);
+      el.style.setProperty('--pl',placement(st));
+      el.style.setProperty('--lr','rotate(0deg)');
+      el.querySelector('.ch').textContent=st.ch;
+      const isSlot=(f==='F'&&slot<L);
+      el.classList.toggle('slot',isSlot&&opts.slots);
+      el.classList.toggle('ok',isSlot&&st.ch===word[slot]);
+      el.querySelector('.num').textContent=(isSlot&&opts.slots)?String(slot+1):'';
+      el.setAttribute('aria-hidden','true');
+    });
+    /* the goal tiles mirror the front face, so progress reads without the cube */
+    const tiles=$('#tiles'); tiles.innerHTML='';
+    for(let i=0;i<L;i++){
+      const t=document.createElement('div');
+      t.className='tile'+(front[i]===word[i]?' ok':'');
+      t.textContent=word[i];
+      tiles.appendChild(t);
+    }
+    $('#prompt').innerHTML='Spell <b>'+word+'</b> on the front face.';
+    XW.setChip('moves',String(moves));
+    $('#undoBtn').disabled=!hist.length;
+    $('#hintBtn').disabled=done[rung];
+    paintLadder();
+    save();
+  }
+
+  function paintLadder(){
+    [$('#ladder'),$('#ladderMob')].forEach(host=>{
+      host.innerHTML='';
+      P.rungs.forEach((r,i)=>{
+        const b=document.createElement('button');
+        b.type='button';
+        b.className='rung'+(i===rung?' on':'')+(done[i]?' won':'');
+        b.setAttribute('aria-current',i===rung?'true':'false');
+        const len=document.createElement('span'); len.className='len'; len.textContent=r.len;
+        const mini=document.createElement('span'); mini.className='mini';
+        const shown=(i===rung)?T.faceLetters(state,'F'):null;
+        for(let k=0;k<r.len;k++){
+          const c=document.createElement('i');
+          if(done[i]||(shown&&shown[k]===r.word[k])) c.className='ok';
+          mini.appendChild(c);
+        }
+        b.appendChild(len); b.appendChild(mini);
+        if(done[i]){
+          const t=document.createElement('span'); t.className='tick';
+          t.textContent='✓ '+rungMoves[i]+' turns'; b.appendChild(t);
+        }
+        b.setAttribute('aria-label','Word '+(i+1)+', '+r.len+' letters'+
+          (done[i]?', solved in '+rungMoves[i]+' turns':''));
+        b.addEventListener('click',()=>loadRung(i));
+        host.appendChild(b);
+      });
+    });
+  }
+
+  /* ---------- turning ---------- */
+  let busy=false;
+  function turn(move,record){
+    if(busy||won) return;
+    const f=move[0], a=T.axisOf(f), s=T.signOf(f);
+    const css=layerCss(f,move.length>1);
+    if(record!==false){ hist.push(move); moves++; rungMoves[rung]=(rungMoves[rung]||0)+1; }
+    hintMove='';
+
+    const affected=[];
+    state.forEach((st,i)=>{ if(st.p[a]===s) affected.push(i); });
+
+    const commit=()=>{
+      T.applyMove(state,move);
+      affected.forEach(i=>els[i].classList.add('nofx'));
+      paint();
+      /* one forced reflow so the reset transform is not itself animated */
+      void cubeEl.offsetWidth;
+      affected.forEach(i=>els[i].classList.remove('nofx'));
+      busy=false;
+      checkWin();
+    };
+
+    if(!opts.anim||window.matchMedia('(prefers-reduced-motion: reduce)').matches){ commit(); return; }
+    busy=true;
+    affected.forEach(i=>els[i].style.setProperty('--lr',css));
+    setTimeout(commit,270);
+  }
+
+  function loadRung(i){
+    if(busy) return;
+    rung=i;
+    state=T.clone(P.rungs[i].start);
+    /* Revisiting a word you already solved should show it solved — a ticked
+       row above a scrambled cube reads as a bug. */
+    if(done[i]) P.rungs[i].solution.forEach(m=>T.applyMove(state,m));
+    hist=[]; rungMoves[i]=rungMoves[i]||0; hintMove='';
+    paint();
+    XW.announce('Word '+(i+1)+', '+P.rungs[i].len+' letters'+(done[i]?', already solved':'')+'.');
+  }
+
+  /* ---------- win ----------
+     A rung is done the moment the front face reads the word; the puzzle is
+     done when all three are. Score is turns and time, per the brief. */
+  function checkWin(){
+    const R=P.rungs[rung];
+    if(!done[rung]&&T.readWord(state,'F',R.len)===R.word){
+      done[rung]=true;
+      paintLadder(); save();
+      XW.emit('assist_used',{action:'rung_complete',rung:rung});
+      const next=done.findIndex(d=>!d);
+      if(next<0){
+        won=true; XW.timer.stop();
+        $('#winMoves').textContent=String(moves);
+        $('#winTime').textContent=XW.fmtTime(XW.timer.secs);
+        XW.openOverlay('winOverlay');
+        XW.emit('game_complete',{puzzleId:puzId,seconds:XW.timer.secs,moves:moves});
+        XW.announce('All three words spelled in '+moves+' turns.');
+      }else{
+        XW.toast('“'+R.word+'” — got it. Next word.');
+        XW.announce('“'+R.word+'” solved. Moving to word '+(next+1)+'.');
+        setTimeout(()=>{ if(!won) loadRung(next); },900);
+      }
+    }
+  }
+
+  /* ---------- hint ----------
+     Search from where the player actually is rather than replaying the stored
+     solution, because they may have wandered. Depth 4 with no immediate
+     repeats is a few thousand states — instant, and always enough given no
+     rung is generated deeper than four turns. */
+  function findMove(){
+    const R=P.rungs[rung], L=R.len, word=R.word;
+    for(let depth=1;depth<=4;depth++){
+      const found=dfs(T.clone(state),depth,'',L,word);
+      if(found) return found;
+    }
+    return '';
+  }
+  function dfs(st,depth,lastFace,L,word){
+    for(const m of T.MOVES){
+      if(m[0]===lastFace) continue;
+      const nx=T.clone(st);
+      T.applyMove(nx,m);
+      if(T.readWord(nx,'F',L)===word) return m;
+      if(depth>1&&dfs(nx,depth-1,m[0],L,word)) return m;
+    }
+    return '';
+  }
+
+  $('#hintBtn').onclick=()=>{
+    if(done[rung]) return;
+    const m=findMove();
+    XW.emit('assist_used',{action:'hint'});
+    if(!m){ XW.toast('Try Undo — that is further from the word than it looks.'); return; }
+    hintMove=m;
+    const f=m[0], dir=m.length>1?'anticlockwise':'clockwise';
+    XW.toast('Turn the '+FACE_LABEL[f].toLowerCase()+' face '+dir+'.');
+    XW.announce('Hint: turn the '+FACE_LABEL[f]+' face '+dir+'.');
+    const btn=document.querySelector('[data-move="'+m+'"]');
+    if(btn){ btn.style.background='var(--active)';
+             setTimeout(()=>{btn.style.background='';},1400); }
+  };
+  $('#undoBtn').onclick=()=>{
+    if(!hist.length||busy) return;
+    const m=hist.pop();
+    moves++; rungMoves[rung]++;          /* an undo is a turn; it still costs */
+    turn(T.invert(m),false);
+  };
+  $('#resetBtn').onclick=()=>{
+    XW.dialog('Start again','Put this word back the way it started?',()=>{
+      XW.closeOverlay($('#dialogOverlay'));
+      rungMoves[rung]=0;
+      loadRung(rung);
+    },{ok:'Restart',cancel:'Cancel'});
+  };
+
+  /* ---------- move pad ---------- */
+  (function buildPad(){
+    const pad=$('#pad');
+    pad.innerHTML='';
+    const blank=document.createElement('span'); blank.className='ph'; pad.appendChild(blank);
+    ['↺','↻'].forEach(g=>{ const h=document.createElement('span'); h.className='ph'; h.textContent=g; pad.appendChild(h); });
+    PAD_ORDER.forEach(f=>{
+      const lab=document.createElement('span'); lab.className='fl'; lab.textContent=FACE_LABEL[f];
+      pad.appendChild(lab);
+      [["'",'↺','anticlockwise'],['','↻','clockwise']].forEach(([suf,glyph,dir])=>{
+        const b=document.createElement('button');
+        b.type='button'; b.className='mv'; b.textContent=glyph;
+        b.dataset.move=f+suf;
+        b.setAttribute('aria-label','Turn the '+FACE_LABEL[f]+' face '+dir);
+        b.addEventListener('click',()=>turn(f+suf));
+        pad.appendChild(b);
+      });
+    });
+  })();
+
+  /* the dock reuses the rail's three actions rather than growing its own */
+  (function buildMobRow(){
+    const row=$('#mobRow');
+    [['undoBtn','i-undo','Undo'],['resetBtn','i-redo','Restart'],['hintBtn','i-lifebuoy','Hint']]
+      .forEach(([id,ic,label])=>{
+        const b=document.createElement('button');
+        b.type='button'; b.className='pbtn'+(id==='hintBtn'?' hint':'');
+        b.innerHTML='<svg aria-hidden="true"><use href="icons.svg#'+ic+'"/></svg>'+label;
+        b.addEventListener('click',()=>document.getElementById(id).click());
+        b.id='m-'+id;
+        row.appendChild(b);
+      });
+    const sync=()=>{ ['undoBtn','resetBtn','hintBtn'].forEach(id=>{
+      const src=document.getElementById(id), dst=document.getElementById('m-'+id);
+      if(src&&dst) dst.disabled=src.disabled; }); };
+    new MutationObserver(sync).observe($('.rail'),{attributes:true,subtree:true,attributeFilter:['disabled']});
+    sync();
+  })();
+
+  /* ---------- orbit: drag, keys, and a sane default ---------- */
+  /* A gentle tilt on purpose: the word lives on the front face, so that face
+     stays close to square and readable, and the top and right are angled just
+     enough to see what is coming. */
+  let ax=-20, ay=-28, drag=null;
+  const applyOrbit=()=>{ cubeEl.style.setProperty('--ax',ax+'deg');
+                         cubeEl.style.setProperty('--ay',ay+'deg'); };
+  const scene=$('#scene');
+  scene.addEventListener('pointerdown',e=>{ drag={x:e.clientX,y:e.clientY,ax:ax,ay:ay};
+    scene.setPointerCapture(e.pointerId); });
+  scene.addEventListener('pointermove',e=>{
+    if(!drag) return;
+    ay=drag.ay+(e.clientX-drag.x)*.5;
+    ax=Math.max(-80,Math.min(80,drag.ax-(e.clientY-drag.y)*.5));
+    applyOrbit();
+  });
+  const endDrag=()=>{ drag=null; };
+  scene.addEventListener('pointerup',endDrag);
+  scene.addEventListener('pointercancel',endDrag);
+
+  /* ---------- keyboard ----------
+     T/B/L/R/F/K for the six faces (K for "bacK", since B is taken by Bottom),
+     Shift for the other direction. Arrows orbit. */
+  const KEY_FACE={t:'U',b:'D',l:'L',r:'R',f:'F',k:'B'};
+  document.addEventListener('keydown',e=>{
+    if(XW.anyOverlayOpen()) return;
+    const tag=(e.target.tagName||'').toLowerCase();
+    if(tag==='input'||tag==='textarea') return;
+    const f=KEY_FACE[e.key.toLowerCase()];
+    if(f){ e.preventDefault(); turn(f+(e.shiftKey?"'":'')); return; }
+    if(e.key==='ArrowLeft'){ e.preventDefault(); ay-=12; applyOrbit(); }
+    else if(e.key==='ArrowRight'){ e.preventDefault(); ay+=12; applyOrbit(); }
+    else if(e.key==='ArrowUp'){ e.preventDefault(); ax=Math.max(-80,ax-12); applyOrbit(); }
+    else if(e.key==='ArrowDown'){ e.preventDefault(); ax=Math.min(80,ax+12); applyOrbit(); }
+    else if(e.key==='z'&&(e.metaKey||e.ctrlKey)){ e.preventDefault(); $('#undoBtn').click(); }
+  });
+
+  /* ---------- sizing ----------
+     The cube scales to whatever the frame gives us, bounded so the stack
+     always fits without scrolling — the same rule the other two players use. */
+  function size(){
+    const mob=window.matchMedia('(max-width:860px)').matches;
+    const w=$('.stage').clientWidth||320;
+    const dock=mob?($('#mobiledock').offsetHeight||0):0;
+    const chrome=($('.topbar').offsetHeight||0)+dock+
+                 ($('#prompt').offsetHeight||0)+($('#tiles').offsetHeight||0)+
+                 ($('#pad').offsetHeight||0)+($('#caption').offsetHeight||0)+
+                 (mob?($('#ladderMob').offsetHeight||0):0)+96;
+    const availH=Math.max(150,(window.innerHeight||600)-chrome);
+    /* a cube drawn at size S needs roughly 1.5S of room once it is tilted */
+    const cs=Math.max(96,Math.min(mob?230:250,Math.min(w*.62,availH/1.5)));
+    cubeEl.style.setProperty('--cs',cs+'px');
+    cubeEl.style.setProperty('--cell',(cs/3)+'px');
+    cubeEl.style.setProperty('--half',(cs/2)+'px');
+    $('#scene').style.setProperty('--scene-h',Math.round(cs*1.5)+'px');
+  }
+  addEventListener('resize',size);
+
+  /* ---------- persistence ---------- */
+  function save(){
+    XW.storage.save(puzId,{
+      rung:rung, hist:hist.join(' '), moves:moves, rungMoves:rungMoves.join(','),
+      done:done.map(d=>d?1:0).join(''), elapsed:XW.timer.secs, completed:won,
+      filled:done.filter(Boolean).length, total:P.rungs.length
+    });
+  }
+  function load(){
+    const st=XW.storage.load(puzId); if(!st) return;
+    if(typeof st.done==='string') done=st.done.split('').map(c=>c==='1');
+    if(typeof st.rungMoves==='string') rungMoves=st.rungMoves.split(',').map(Number);
+    moves=st.moves||0;
+    won=!!st.completed;
+    rung=Math.min(P.rungs.length-1,Math.max(0,st.rung||0));
+    XW.timer.secs=st.elapsed||0;
+    /* replay the stored turns so the cube comes back exactly as it was */
+    state=T.clone(P.rungs[rung].start);
+    if(typeof st.hist==='string'&&st.hist){
+      hist=st.hist.split(' ').filter(Boolean);
+      hist.forEach(m=>T.applyMove(state,m));
+    }
+  }
+
+  /* ---------- wiring ---------- */
+  XW.wireChrome({
+    title:()=>'Turnspell',
+    toggleTimer:()=>{ XW.timer.stopped=!XW.timer.stopped;
+      if(!XW.timer.stopped) XW.timer._last=Date.now();
+      $('#timerPill').classList.toggle('paused',XW.timer.stopped);
+      XW.announce(XW.timer.stopped?'Timer paused':'Timer running'); },
+    menu:act=>{
+      if(act==='more') XW.goArchive();
+      else if(act==='howto') XW.openOverlay('howtoOverlay');
+      else if(act==='support') XW.openOverlay('supportOverlay');
+      else if(act==='restart'){
+        XW.dialog('Start again','Reset all three words and the clock?',()=>{
+          XW.closeOverlay($('#dialogOverlay'));
+          XW.storage.clear(puzId);
+          done=[false,false,false]; rungMoves=[0,0,0]; moves=0; won=false;
+          XW.timer.reset(); XW.timer.stopped=false;
+          loadRung(0);
+        },{ok:'Restart',cancel:'Cancel'});
+      }
+    }
+  });
+  $('#settingsBtn').onclick=()=>XW.openOverlay('settingsOverlay');
+  $('#applySettings').onclick=()=>{
+    opts.slots=$('#optSlots').checked;
+    opts.anim=$('#optAnim').checked;
+    $('#timerPill').classList.toggle('collapsed',!$('#optTimerShown').checked);
+    XW.closeOverlay($('#settingsOverlay'));
+    paint();
+  };
+  $('#dlgOk').onclick=()=>{ const a=XW.dlgAction; if(a) a(); else XW.closeOverlay($('#dialogOverlay')); };
+  $('#winMore').onclick=()=>XW.goArchive();
+  $('#winShare').onclick=()=>{
+    XW.share('copy',XW.shareUrl(),XW.shareText('Turnspell'));
+    XW.emit('share_clicked',{target:'copy'});
+  };
+
+  $('#ticketNo').textContent=(function(){
+    let h=0; for(let i=0;i<puzId.length;i++) h=(Math.imul(h,31)+puzId.charCodeAt(i))>>>0;
+    const hex=n=>((n>>>0).toString(16)).slice(-7).padStart(7,'0');
+    return 'lat-'+hex(h)+'-'+hex(h^0x9e3779b9);
+  })();
+
+  /* ---------- boot ---------- */
+  buildCube();
+  state=T.clone(P.rungs[0].start);
+  load();
+  applyOrbit();
+  paint();
+  size();
+  setTimeout(size,80);
+  XW.timer.onTick=s=>{ $('#timer').textContent=XW.fmtTime(s); };
+  XW.timer.start(XW.timer.secs);
+  if(won) XW.timer.stop();
+  XW.emit('game_start',{puzzleId:puzId,engine:'turnspell'});
+  if(substituted) setTimeout(()=>XW.toast('“'+substituted+'” is not available yet — showing today'),400);
+  setInterval(save,10000);
+})();
+</script>
+</body>
+</html>

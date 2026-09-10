@@ -24,8 +24,11 @@
   .board{display:grid;grid-template-columns:repeat(var(--n,9),1fr);
          grid-template-rows:repeat(var(--n,9),1fr);
          width:min(100%,var(--board-max,470px));aspect-ratio:1;
-         border:1.5px solid var(--grid);background:var(--grid);gap:0}
-  .sc{position:relative;background:#fff;border:.5px solid #e2e2e2;
+         border:2.5px solid var(--grid);background:var(--grid);gap:0}
+  /* Three weights of rule, so the structure reads before the numbers do:
+     the outer frame heaviest, the box separators next, the cell rules
+     lightest — but dark enough to actually see at phone sizes. */
+  .sc{position:relative;background:#fff;border:.5px solid #808080;
       display:flex;align-items:center;justify-content:center;cursor:pointer;
       font-weight:600;font-size:clamp(15px,3.4vw,26px);color:var(--ink3);
       user-select:none;-webkit-tap-highlight-color:transparent}
@@ -36,7 +39,10 @@
   /* Figma: a given clue sits on grey, anything the reader typed sits on white.
      That is the only thing distinguishing them — weight and colour match. */
   .sc.given{background:#efefef}       /* cell-0-2 etc. */
-  .sc.peer{background:#f6f6f6}
+  /* The selected digit's twins and the selected cell's group share one tint,
+     so "related to what I have selected" reads as a single idea rather than
+     two competing washes. Declared together so the two cannot drift apart. */
+  .sc.peer,
   .sc.same{background:#fdf0b4}                    /* every cell holding the selected digit */
   .sc.sel{background:#0fafff;color:#fff}          /* cell-0-0 in SETTINGS 1 */
   .sc.sel.given{background:#0fafff}
@@ -156,6 +162,12 @@
      lines more pixels than others — which is exactly what independently
      bordered DOM cells do. */
   #printGrid{display:none}
+  /* The ink preview is a miniature of what actually prints, so on a sudoku it
+     shows digits on rules rather than the crossword's blocked squares. Only
+     the rules take the slider's ink — buildPrintGrid always draws the digits
+     in black — so the digits stay black here too. */
+  #inkPreview span{display:flex;align-items:center;justify-content:center;
+    font-size:14px;font-weight:700;line-height:1;color:#18181b}
   @media print{
     .topbar,.rail,#mobiledock,.overlay,#toast,.board{display:none !important}
     .main{display:block;padding:0}
@@ -211,7 +223,7 @@
       <!-- SETTINGS 1: six switches. Same .sgroup/.srow/.sw structure the
            crossword uses, which is what core.css actually styles. -->
       <div class="sgroup">
-        <div class="srow"><div class="lab"><b>Error check mode</b><span>Marks incorrect letters with a diagonal line</span></div>
+        <div class="srow"><div class="lab"><b>Error check mode</b><span>Marks incorrect numbers with a diagonal line</span></div>
           <label class="sw"><input type="checkbox" id="optErr"/><i></i></label></div>
         <div class="srow"><div class="lab"><b>Show timer</b><span>Shows the timer while playing this puzzle</span></div>
           <label class="sw"><input type="checkbox" id="optTimerShown" checked/><i></i></label></div>
@@ -283,9 +295,9 @@
       <p><b>To save ink, adjust the slider:</b></p>
       <div class="inkrow">
         <div class="mini3" id="inkPreview" aria-hidden="true">
-          <span class="k"></span><span></span><span class="k"></span>
-          <span></span><span></span><span></span>
-          <span class="k"></span><span></span><span class="k"></span>
+          <span>1</span><span></span><span>5</span>
+          <span></span><span>3</span><span></span>
+          <span>2</span><span></span><span>7</span>
         </div>
         <input type="range" class="inkslider" id="inkSlider" min="0" max="100" value="100" aria-label="Ink darkness"/>
       </div>
@@ -830,11 +842,12 @@
     const lvl=Math.round(INK_MIN-(INK_MIN-INK_MAX)*pct);
     return 'rgb('+lvl+','+lvl+','+lvl+')';
   }
+  /* Rules only: a sudoku has no blocked squares to fill, and the digits print
+     black at every slider position, so tinting them would misrepresent the
+     saving. See the #inkPreview note in the stylesheet. */
   function paintInk(){
     const col=inkColour();
-    inkPreview.querySelectorAll('span').forEach(s=>{
-      s.style.borderColor=col; if(s.classList.contains('k'))s.style.background=col;
-    });
+    inkPreview.querySelectorAll('span').forEach(s=>{ s.style.borderColor=col; });
   }
   inkSlider.addEventListener('input',paintInk); paintInk();
 
