@@ -31,7 +31,12 @@
          perspective:1500px;touch-action:none;cursor:grab;
          height:var(--scene-h,320px);flex:none;
          user-select:none;-webkit-user-select:none;-webkit-touch-callout:none}
-  .scene *{user-select:none;-webkit-user-select:none;pointer-events:none}
+  /* Stickers keep pointer events so a swipe can tell which one it started on;
+     everything else in the scene stays inert so the hit always lands on the
+     tile itself. `user-select` alone is what stops the letters highlighting —
+     that was never the job of `pointer-events`. */
+  .scene *{user-select:none;-webkit-user-select:none}
+  .st .ch,.st .num,.corepanel{pointer-events:none}
   .scene:active{cursor:grabbing}
   .scene:focus-visible{outline:2px solid var(--focus);outline-offset:4px;border-radius:12px}
   .cube{position:relative;transform-style:preserve-3d;
@@ -224,6 +229,8 @@
       <div class="sgroup">
         <div class="srow"><div class="lab"><b>Show timer</b><span>Shows the timer while playing this puzzle</span></div>
           <label class="sw"><input type="checkbox" id="optTimerShown" checked/><i></i></label></div>
+        <div class="srow"><div class="lab"><b>Swipe the cube to turn</b><span>Swipe across a face to turn it. Drag the background to look around.</span></div>
+          <label class="sw"><input type="checkbox" id="optSwipe"/><i></i></label></div>
         <div class="srow"><div class="lab"><b>Animate turns</b><span>Turn this off if the cube feels slow on your device</span></div>
           <label class="sw"><input type="checkbox" id="optAnim" checked/><i></i></label></div>
       </div>
@@ -338,7 +345,7 @@
   let active=LENS[0], state=null, hist=[], moves=0;
   const solvedAt={};
   let won=false;
-  const opts={anim:true};
+  const opts={anim:true, swipe:false};
 
   /* Face names rather than notation, in the order a reader scans them. */
   const FACE_LABEL={U:'Top',D:'Bottom',L:'Left',R:'Right',F:'Front',B:'Back'};
@@ -646,16 +653,79 @@
   let ax=AX_HOME, ay=AY_HOME, drag=null;
   const applyOrbit=()=>{ cubeEl.style.setProperty('--ax',ax+'deg');
                          cubeEl.style.setProperty('--ay',ay+'deg'); };
+  /* ---------- swipe to turn ----------
+     Which layer a swipe means depends on where it started and which way it
+     went ACROSS THE FACE — so the face's two on-screen directions are read
+     off the rendered stickers themselves rather than re-deriving the
+     projection. Ask where the neighbouring cells actually are and the answer
+     is right for whatever orientation the cube happens to be in. */
+  const dot3=(a,b)=>a[0]*b[0]+a[1]*b[1]+a[2]*b[2];
+  const SWIPE_MIN=16;                      /* below this it was a tap, not a swipe */
+
+  function faceAxes(f){
+    const byCell={};
+    state.forEach((st,i)=>{ if(faceOf(st.n)===f) byCell[T.cellOf(f,st.p)]=els[i]; });
+    const mid=cell=>{ const r=byCell[cell].getBoundingClientRect();
+                      return {x:r.left+r.width/2, y:r.top+r.height/2}; };
+    const c1=mid(1), c2=mid(2), c4=mid(4);
+    /* cells are row-major from the face's own basis: 2 minus 1 is one step
+       along `right`, 1 minus 4 is one step along `up` */
+    return { right:{x:c2.x-c1.x, y:c2.y-c1.y}, up:{x:c1.x-c4.x, y:c1.y-c4.y} };
+  }
+
+  function moveForSwipe(idx,dx,dy){
+    const st=state[idx], f=faceOf(st.n), F=T.FACES[f];
+    const ax2=faceAxes(f);
+    const alongR=(dx*ax2.right.x+dy*ax2.right.y)/Math.hypot(ax2.right.x,ax2.right.y);
+    const alongU=(dx*ax2.up.x+dy*ax2.up.y)/Math.hypot(ax2.up.x,ax2.up.y);
+
+    let axisVec, level, prime;
+    if(Math.abs(alongR)>=Math.abs(alongU)){
+      /* dragged across the face: the layer turns about the face's up axis */
+      const s=alongR>0?1:-1;
+      axisVec=F.up; level=dot3(st.p,F.up);
+      if(!level) return null;                       /* a middle row — no face turn */
+      prime=(s*level)===1;
+    }else{
+      /* dragged up or down the face: the layer turns about its right axis */
+      const s=alongU>0?1:-1;
+      axisVec=F.right; level=dot3(st.p,F.right);
+      if(!level) return null;
+      prime=(s*level)===-1;
+    }
+    const n=axisVec.map(v=>v*level);
+    const face=T.FACE_IDS.find(g=>{const N=T.FACES[g].n;
+      return N[0]===n[0]&&N[1]===n[1]&&N[2]===n[2];});
+    return face?(face+(prime?"'":'')):null;
+  }
+
   const scene=$('#scene');
-  scene.addEventListener('pointerdown',e=>{ drag={x:e.clientX,y:e.clientY,ax:ax,ay:ay};
-    scene.setPointerCapture(e.pointerId); });
+  scene.addEventListener('pointerdown',e=>{
+    const tile=e.target.closest&&e.target.closest('.st');
+    const idx=tile?els.indexOf(tile):-1;
+    /* Swipes only claim the pointer when they start ON the cube. Starting in
+       the background always orbits, whatever the setting. */
+    if(opts.swipe&&idx>=0){ drag={mode:'turn', idx:idx, x:e.clientX, y:e.clientY}; }
+    else{ drag={mode:'orbit', x:e.clientX, y:e.clientY, ax:ax, ay:ay}; }
+    scene.setPointerCapture(e.pointerId);
+  });
   scene.addEventListener('pointermove',e=>{
-    if(!drag) return;
+    if(!drag||drag.mode!=='orbit') return;
     ay=drag.ay+(e.clientX-drag.x)*.5;
     ax=Math.max(-AX_MAX,Math.min(AX_MAX,drag.ax-(e.clientY-drag.y)*.5));
     applyOrbit();
   });
-  const endDrag=()=>{ drag=null; };
+  const endDrag=e=>{
+    if(drag&&drag.mode==='turn'&&e){
+      const dx=e.clientX-drag.x, dy=e.clientY-drag.y;
+      if(Math.hypot(dx,dy)>=SWIPE_MIN){
+        const m=moveForSwipe(drag.idx,dx,dy);
+        if(m) turn(m);
+        else XW.toast('The middle row does not turn on its own — try an outer one.');
+      }
+    }
+    drag=null;
+  };
   scene.addEventListener('pointerup',endDrag);
   scene.addEventListener('pointercancel',endDrag);
 
@@ -758,6 +828,7 @@
   $('#settingsBtn').onclick=()=>XW.openOverlay('settingsOverlay');
   $('#applySettings').onclick=()=>{
     opts.anim=$('#optAnim').checked;
+    opts.swipe=$('#optSwipe').checked;
     $('#timerPill').classList.toggle('collapsed',!$('#optTimerShown').checked);
     XW.closeOverlay($('#settingsOverlay'));
     paint();
