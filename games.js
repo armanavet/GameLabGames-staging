@@ -102,6 +102,32 @@
   const cubeArt = isoCube(52, 'currentColor', 2);
   const cubeRow = isoCube(35, ROW_INK, 1.4);
 
+  /* Gridlock's mark: a sliding letter grid with the reading window banded
+     across the middle row. Generated at two sizes from one description, as
+     the cube is. */
+  const gridlock = (S, ink, sw) => {
+    const cols = 4, rows = 3;
+    const pad = .11 * S, w = S - pad * 2;
+    const cw = w / cols, chh = w / cols, top = (S - chh * rows) / 2;
+    const g = .08 * cw;
+    let d = '';
+    for (let r = 0; r < rows; r++) for (let c = 0; c < cols; c++) {
+      const x = pad + c * cw + g, y = top + r * chh + g;
+      const s = cw - g * 2;
+      d += 'M' + x.toFixed(1) + ' ' + y.toFixed(1) +
+           'h' + s.toFixed(1) + 'v' + s.toFixed(1) + 'h' + (-s).toFixed(1) + 'z';
+    }
+    /* the window the guess is read through — the middle row, edge to edge */
+    const wy = top + chh;
+    d += 'M' + (pad - g).toFixed(1) + ' ' + wy.toFixed(1) + 'h' + (w + g * 2).toFixed(1) +
+         'M' + (pad - g).toFixed(1) + ' ' + (wy + chh).toFixed(1) + 'h' + (w + g * 2).toFixed(1);
+    return '<svg viewBox="0 0 ' + S + ' ' + S + '" aria-hidden="true">' +
+      '<path d="' + d + '" fill="none" stroke="' + ink + '" stroke-width="' + sw +
+      '" stroke-linejoin="round" stroke-linecap="round"/></svg>';
+  };
+  const gridlockArt = gridlock(52, 'currentColor', 2);
+  const gridlockRow = gridlock(35, ROW_INK, 1.4);
+
   const nums = n => {
     let out = '<g fill="none" stroke="currentColor" stroke-width="1.8">' +
               '<rect x="4" y="4" width="44" height="44" rx="3"/>';
@@ -154,6 +180,7 @@
        above: an emerald next to the green a correct letter turns, so the card
        and the board agree about what "right" looks like. */
     turnspell:  '#12a06b',
+    gridlock:   '#a8763b',   // brass, for the window band
   };
 
   window.GAMES = {
@@ -231,12 +258,25 @@
        the ladder supplies the difficulty, not the scramble depth. */
     turnspell: {
       label: 'Turnspell', short: 'Turnspell',
-      blurb: 'Turn the letter cube until the words appear.',
+      blurb: 'Turn the letter cube until the words appear.', tag: 'Prototype',
       archiveBlurb: 'Turn the letter cube until the words appear.',
       player: 'turnspell.html', archive: 'archive.html',
       generated: { days: 30, size: '3x3x3', cells: 3 },
       tint: TINT.turnspell, tintInk: '#fff',
       art: cubeArt, archiveArt: cubeRow, live: true
+    },
+    /* Gridlock is Wordle on a sliding grid: five letters read through a window
+       in the middle row, with every row and column sliding and wrapping.
+       Generated from the date like the sudoku and Turnspell, so it has no
+       manifest, no api and nothing to upload. */
+    gridlock: {
+      label: 'Gridlock', short: 'Gridlock',
+      blurb: 'Slide the letters until the hidden word lines up.', tag: 'Prototype',
+      archiveBlurb: 'Slide the letters until the hidden word lines up.',
+      player: 'gridlock.html', archive: 'archive.html',
+      generated: { days: 30, size: '5x7', cells: 6 },
+      tint: TINT.gridlock, tintInk: '#fff',
+      art: gridlockArt, archiveArt: gridlockRow, live: true
     },
     editor: {
       label: 'Puzzle editor', short: 'Editor',

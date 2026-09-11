@@ -333,7 +333,7 @@
     const d=new Date(iso+'T00:00:00');
     const G=(window.GAMES&&window.GAMES[XW.gameId])||{};
     $('#caption').textContent='L. A. Times '+(G.label||'Turnspell')+' · '+
-      DOW[d.getDay()]+', '+MON[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear();
+      DOW[d.getDay()]+', '+MON[d.getMonth()]+' '+d.getDate()+', '+d.getFullYear()+(G.tag?' · '+G.tag:'');
   })();
 
   /* ---------- state ----------
